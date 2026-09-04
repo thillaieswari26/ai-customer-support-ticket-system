@@ -1,9 +1,12 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class TicketCreate(BaseModel):
-    title: str
-    description: str
+    title: str = Field(..., min_length=3, max_length=255)
+    description: str = Field(..., min_length=5)
+    priority: str = "MEDIUM"
+    category: str = "GENERAL"
+    customer_id: int
 
 
 class TicketResponse(BaseModel):
@@ -13,10 +16,5 @@ class TicketResponse(BaseModel):
     status: str
     priority: str
     category: str
-class TicketUpdate(BaseModel):
-    title: str | None = None
-    description: str | None = None
-    status: str | None = None
-    priority: str | None = None
-    category: str | None = None
-    assigned_agent_id: int | None = None
+
+    model_config = {"from_attributes": True}
