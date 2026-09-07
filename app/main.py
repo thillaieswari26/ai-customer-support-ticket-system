@@ -1,6 +1,7 @@
 from fastapi import Depends, FastAPI, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from fastapi import Depends, FastAPI, HTTPException, Query, status
+from sqlalchemy import select
 from app.db.database import AsyncSessionLocal
 from app.models.ticket import Ticket
 from app.schemas.ticket import TicketCreate, TicketResponse
@@ -44,3 +45,37 @@ async def create_ticket(
             status_code=500,
             detail="Unable to create ticket",
         )
+@app.get("/tickets", response_model=list[TicketResponse])
+async def list_tickets(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Ticket)
+        .order_by(Ticket.id.asc())
+        .offset(skip)
+        .limit(limit)
+    )
+
+    return result.scalars().all()
+
+
+@app.get("/tickets/{ticket_id}", response_model=TicketResponse)
+async def get_ticket(
+    ticket_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Ticket).where(Ticket.id == ticket_id)
+    )
+
+    ticket = result.scalar_one_or_none()
+
+    if ticket is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ticket not found",
+        )
+
+    return ticket
