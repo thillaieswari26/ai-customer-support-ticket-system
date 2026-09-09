@@ -5,7 +5,13 @@ from sqlalchemy import select
 from app.db.database import AsyncSessionLocal
 from app.models.ticket import Ticket
 from app.schemas.ticket import TicketCreate, TicketResponse, TicketUpdate
-
+from app.models.user import User
+from app.schemas.auth import LoginRequest, TokenResponse
+from app.core.security import (
+    verify_password,
+    create_access_token,
+    get_current_user,
+)
 app = FastAPI(title="AI Customer Support Ticket System")
 
 
@@ -22,6 +28,7 @@ async def get_db():
 async def create_ticket(
     ticket_data: TicketCreate,
     db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user),
 ):
     try:
         ticket = Ticket(
@@ -50,6 +57,7 @@ async def list_tickets(
     skip: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user),
 ):
     result = await db.execute(
         select(Ticket)
@@ -65,6 +73,7 @@ async def list_tickets(
 async def get_ticket(
     ticket_id: int,
     db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user),
 ):
     result = await db.execute(
         select(Ticket).where(Ticket.id == ticket_id)
@@ -84,6 +93,7 @@ async def update_ticket(
     ticket_id: int,
     ticket_data: TicketUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user),
 ):
     result = await db.execute(
         select(Ticket).where(Ticket.id == ticket_id)
@@ -119,6 +129,7 @@ async def update_ticket(
 async def delete_ticket(
     ticket_id: int,
     db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user),
 ):
     result = await db.execute(
         select(Ticket).where(Ticket.id == ticket_id)
@@ -142,3 +153,31 @@ async def delete_ticket(
             status_code=500,
             detail="Unable to delete ticket",
         )
+@app.post("/auth/login", response_model=TokenResponse)
+async def login(
+    login_data: LoginRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(User).where(User.email == login_data.email)
+    )
+
+    user = result.scalar_one_or_none()
+
+    if user is None or not verify_password(
+        login_data.password,
+        user.password,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
+        )
+
+    access_token = create_access_token(
+        {"sub": str(user.id)}
+    )
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+    }
