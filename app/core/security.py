@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import jwt
+from jose import jwt, JWTError
 from passlib.context import CryptContext
 load_dotenv()
 
@@ -61,8 +61,8 @@ async def get_current_user(
 
         return int(user_id)
 
-    except Exception:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid authentication token",
-        )
+    except JWTError:
+    raise HTTPException(
+        status_code=401,
+        detail="Invalid authentication token",
+    )

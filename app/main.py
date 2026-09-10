@@ -37,7 +37,7 @@ async def create_ticket(
             status="OPEN",
             priority=ticket_data.priority,
             category=ticket_data.category,
-            customer_id=ticket_data.customer_id,
+            customer_id=current_user_id,
         )
 
         db.add(ticket)
@@ -60,14 +60,14 @@ async def list_tickets(
     current_user_id: int = Depends(get_current_user),
 ):
     result = await db.execute(
-        select(Ticket)
-        .order_by(Ticket.id.asc())
-        .offset(skip)
-        .limit(limit)
-    )
+    select(Ticket)
+    .where(Ticket.customer_id == current_user_id)
+    .order_by(Ticket.id.asc())
+    .offset(skip)
+    .limit(limit)
+)
 
     return result.scalars().all()
-
 
 @app.get("/tickets/{ticket_id}", response_model=TicketResponse)
 async def get_ticket(
@@ -76,7 +76,10 @@ async def get_ticket(
     current_user_id: int = Depends(get_current_user),
 ):
     result = await db.execute(
-        select(Ticket).where(Ticket.id == ticket_id)
+        select(Ticket).where(
+            Ticket.id == ticket_id,
+            Ticket.customer_id == current_user_id,
+        )
     )
 
     ticket = result.scalar_one_or_none()
@@ -96,8 +99,12 @@ async def update_ticket(
     current_user_id: int = Depends(get_current_user),
 ):
     result = await db.execute(
-        select(Ticket).where(Ticket.id == ticket_id)
+    select(Ticket).where(
+        Ticket.id == ticket_id,
+        Ticket.customer_id == current_user_id,
     )
+)
+
 
     ticket = result.scalar_one_or_none()
 
@@ -132,9 +139,11 @@ async def delete_ticket(
     current_user_id: int = Depends(get_current_user),
 ):
     result = await db.execute(
-        select(Ticket).where(Ticket.id == ticket_id)
+    select(Ticket).where(
+        Ticket.id == ticket_id,
+        Ticket.customer_id == current_user_id,
     )
-
+)
     ticket = result.scalar_one_or_none()
 
     if ticket is None:
