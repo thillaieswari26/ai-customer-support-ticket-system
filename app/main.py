@@ -1,7 +1,7 @@
 from fastapi import Depends, FastAPI, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Depends, FastAPI, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from app.db.database import AsyncSessionLocal
 from app.models.ticket import Ticket
 from app.schemas.ticket import TicketCreate, TicketResponse, TicketUpdate
@@ -54,18 +54,45 @@ async def create_ticket(
         )
 @app.get("/tickets", response_model=list[TicketResponse])
 async def list_tickets(
+    search: str | None = Query(None),
+    status_filter: str | None = Query(None),
+    priority: str | None = Query(None),
+    category: str | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user_id: int = Depends(get_current_user),
 ):
-    result = await db.execute(
-    select(Ticket)
-    .where(Ticket.customer_id == current_user_id)
-    .order_by(Ticket.id.asc())
-    .offset(skip)
-    .limit(limit)
-)
+    query = select(Ticket).where(
+        Ticket.customer_id == current_user_id
+    )
+
+    if search:
+        search_pattern = f"%{search}%"
+        query = query.where(
+            or_(
+                Ticket.title.ilike(search_pattern),
+                Ticket.description.ilike(search_pattern),
+            )
+        )
+
+    if status_filter:
+        query = query.where(Ticket.status == status_filter)
+
+    if priority:
+        query = query.where(Ticket.priority == priority)
+
+    if category:
+        query = query.where(Ticket.category == category)
+
+    query = (
+        query
+        .order_by(Ticket.id.asc())
+        .offset(skip)
+        .limit(limit)
+    )
+
+    result = await db.execute(query)
 
     return result.scalars().all()
 
