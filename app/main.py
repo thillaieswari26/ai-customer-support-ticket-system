@@ -7,6 +7,9 @@ from app.models.ticket import Ticket
 from app.schemas.ticket import TicketCreate, TicketResponse, TicketUpdate
 from app.models.user import User
 from app.schemas.auth import LoginRequest, TokenResponse
+from app.schemas.ai_analysis import AIAnalysisResponse
+from app.services import ai_service
+from app.models.ai_analysis import AIAnalysis
 from app.core.security import (
     verify_password,
     create_access_token,
@@ -217,3 +220,51 @@ async def login(
         "access_token": access_token,
         "token_type": "bearer",
     }
+@app.post(
+    "/tickets/{ticket_id}/analyze",
+    response_model=AIAnalysisResponse,
+)
+async def analyze_ticket(
+    ticket_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Ticket).where(
+            Ticket.id == ticket_id,
+            Ticket.customer_id == current_user_id,
+        )
+    )
+
+    ticket = result.scalar_one_or_none()
+
+    if ticket is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ticket not found",
+        )
+
+    try:
+        analysis_data = await ai_service.analyze_ticket(
+            ticket.title,
+            ticket.description,
+        )
+    except ai_service.AIServiceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        )
+
+    analysis = AIAnalysis(
+        ticket_id=ticket.id,
+        category=analysis_data["category"],
+        priority=analysis_data["priority"],
+        sentiment=analysis_data["sentiment"],
+        suggested_response=analysis_data["suggested_response"],
+    )
+
+    db.add(analysis)
+    await db.commit()
+    await db.refresh(analysis)
+
+    return analysis

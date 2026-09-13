@@ -8,3 +8,5 @@ class AIAnalysisResponse(BaseModel):
     priority: str
     sentiment: str
     suggested_response: str
+
+    model_config = {"from_attributes": True}
