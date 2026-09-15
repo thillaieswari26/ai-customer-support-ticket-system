@@ -1,3 +1,6 @@
+import logging
+
+from app.core.logging_config import setup_logging
 from fastapi import Depends, FastAPI, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Depends, FastAPI, HTTPException, Query, status
@@ -15,6 +18,8 @@ from app.core.security import (
     create_access_token,
     get_current_user,
 )
+setup_logging()
+logger = logging.getLogger(__name__)
 app = FastAPI(title="AI Customer Support Ticket System")
 
 
@@ -48,9 +53,10 @@ async def create_ticket(
         await db.refresh(ticket)
 
         return ticket
-
     except Exception:
         await db.rollback()
+        logger.exception("Unexpected error while processing ticket")
+
         raise HTTPException(
             status_code=500,
             detail="Unable to create ticket",
@@ -156,6 +162,8 @@ async def update_ticket(
 
     except Exception:
         await db.rollback()
+        logger.exception("Unexpected error while processing ticket")
+
         raise HTTPException(
             status_code=500,
             detail="Unable to update ticket",
@@ -188,6 +196,7 @@ async def delete_ticket(
 
     except Exception:
         await db.rollback()
+        logger.exception("Unexpected error while deleting ticket")
         raise HTTPException(
             status_code=500,
             detail="Unable to delete ticket",
@@ -237,11 +246,24 @@ async def analyze_ticket(
     )
 
     ticket = result.scalar_one_or_none()
-
     if ticket is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Ticket not found",
+        )
+
+    existing_result = await db.execute(
+        select(AIAnalysis).where(
+            AIAnalysis.ticket_id == ticket_id
+        )
+    )
+
+    existing_analysis = existing_result.scalar_one_or_none()
+
+    if existing_analysis is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="AI analysis already exists for this ticket",
         )
 
     try:
@@ -250,6 +272,7 @@ async def analyze_ticket(
             ticket.description,
         )
     except ai_service.AIServiceError as exc:
+        logger.error("AI service failure: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),
@@ -263,8 +286,17 @@ async def analyze_ticket(
         suggested_response=analysis_data["suggested_response"],
     )
 
-    db.add(analysis)
-    await db.commit()
-    await db.refresh(analysis)
+    try:
+        db.add(analysis)
+        await db.commit()
+        await db.refresh(analysis)
 
-    return analysis
+        return analysis
+
+    except Exception:
+        await db.rollback()
+        logger.exception("Unexpected error while saving AI analysis")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to save AI analysis",
+        )
