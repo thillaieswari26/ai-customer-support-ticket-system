@@ -2,17 +2,17 @@ import logging
 
 from app.core.logging_config import setup_logging
 from fastapi import Depends, FastAPI, HTTPException, Query, status
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_
 
 from app.db.database import AsyncSessionLocal
-from app.models.ticket import Ticket
-from app.schemas.ticket import TicketCreate, TicketResponse, TicketUpdate
-from app.models.user import User
-from app.schemas.auth import LoginRequest, TokenResponse
-from app.schemas.ai_analysis import AIAnalysisResponse
-from app.services import ai_service
 from app.models.ai_analysis import AIAnalysis
+from app.models.ticket import Ticket
+from app.models.user import User
+from app.schemas.ai_analysis import AIAnalysisResponse
+from app.schemas.auth import LoginRequest, TokenResponse
+from app.schemas.ticket import TicketCreate, TicketResponse, TicketUpdate
+from app.services import ai_service
 from app.core.security import (
     verify_password,
     create_access_token,
@@ -34,12 +34,37 @@ app = FastAPI(
     contact={
         "name": "AI Customer Support Ticket System",
     },
+    debug=False,
 )
 
 
 async def get_db():
     async with AsyncSessionLocal() as session:
         yield session
+
+
+@app.get("/health")
+async def health_check(
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        await db.execute(select(1))
+
+        return {
+            "status": "healthy",
+            "database": "connected",
+        }
+
+    except Exception:
+        logger.exception("Health check failed")
+
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "status": "unhealthy",
+                "database": "disconnected",
+            },
+        )
 
 
 @app.post(

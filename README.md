@@ -18,6 +18,8 @@ A FastAPI backend for managing customer support tickets with JWT authentication,
 - Automated API tests
 - OpenAPI/Swagger documentation
 - Structured logging and error handling
+- Production health checks
+- Production startup configuration
 
 ## Tech Stack
 
@@ -57,8 +59,16 @@ DATABASE_URL=postgresql+asyncpg://postgres@localhost:5432/customer_support_db
 SECRET_KEY=your-secret-key
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
+DEBUG=false
 
-Do not commit the .env file to GitHub.
+For production:
+
+Use a strong randomly generated SECRET_KEY.
+Use the production PostgreSQL connection string.
+Keep DEBUG=false.
+Never commit .env to source control.
+
+The repository includes .env.example as a safe configuration template.
 
 Database Setup
 
@@ -74,6 +84,7 @@ To roll back the latest migration:
 
 alembic downgrade -1
 Run the API
+Development
 
 Start the FastAPI development server:
 
@@ -82,6 +93,39 @@ uvicorn app.main:app --reload
 The API will be available at:
 
 http://127.0.0.1:8000
+Production
+
+Start the API without the development auto-reloader:
+
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+The production startup command:
+
+Binds the application to all network interfaces.
+Uses port 8000.
+Does not use --reload.
+Keeps FastAPI debug mode disabled.
+Health Check
+
+The application provides a health endpoint:
+
+GET /health
+
+The endpoint checks the PostgreSQL database connection before reporting the application as healthy.
+
+Healthy response:
+
+{
+  "status": "healthy",
+  "database": "connected"
+}
+
+If the database is unavailable, the endpoint returns:
+
+503 Service Unavailable
+
+This endpoint can be used by a deployment platform or container orchestrator for application health monitoring.
+
 API Documentation
 
 FastAPI automatically provides interactive API documentation.
@@ -212,6 +256,46 @@ alembic upgrade head
 Rollback the latest migration:
 
 alembic downgrade -1
+Deployment Checklist
+
+Before deploying the application:
+
+ Set DEBUG=false
+ Configure the production DATABASE_URL
+ Generate a strong production SECRET_KEY
+ Confirm .env is excluded from Git
+ Confirm no secrets are committed to the repository
+ Install production dependencies
+ Run alembic upgrade head
+ Verify GET /health returns a healthy status
+ Start the application without --reload
+ Verify /docs and /openapi.json
+ Run the automated test suite before deployment
+ Verify database connectivity
+ Verify application logs are available
+ Confirm protected endpoints require authentication
+Production Configuration
+
+Production configuration requirements:
+
+DEBUG=false
+
+The FastAPI application explicitly runs with debug mode disabled.
+
+The production startup command is:
+
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+The application uses environment variables for database credentials and authentication secrets.
+
+Security
+Passwords are stored using secure hashing.
+Protected endpoints require JWT authentication.
+Users can only access their own tickets.
+Secrets and environment-specific configuration are stored in .env.
+.env is excluded from source control.
+.env.example contains only placeholder configuration.
+Production debug mode is disabled.
 Project Structure
 ai-customer-support-ticket-system/
 │
@@ -225,18 +309,11 @@ ai-customer-support-ticket-system/
 │
 ├── alembic/
 ├── tests/
-├── .env
 ├── .env.example
 ├── alembic.ini
 ├── requirements.txt
 ├── check_db.py
 └── README.md
-Security
-Passwords are stored using secure hashing.
-Protected endpoints require JWT authentication.
-Users can only access their own tickets.
-Secrets and environment-specific configuration should be stored in .env.
-.env should never be committed to the repository.
 License
 
 This project was developed as part of a backend AI engineering internship project.
@@ -244,7 +321,7 @@ This project was developed as part of a backend AI engineering internship projec
 
 Save the file.
 
-Then run:
+Then run **only this command**:
 
-```powershell id="h7q4px"
+```powershell
 git status
